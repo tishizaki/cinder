@@ -69,6 +69,7 @@ class SheepdogClient(object):
     DOG_RESP_VDI_NOT_FOUND = ': No VDI found'
     DOG_RESP_VDI_SHRINK_NOT_SUPPORT = 'Shrinking VDIs is not implemented'
     DOG_RESP_VDI_SIZE_TOO_LARGE = 'New VDI size is too large'
+    DOG_RESP_GET_NO_NODE_INFO = 'Cannot get information from any nodes'
 
     def __init__(self, addr, port):
         self.addr = addr
@@ -207,6 +208,32 @@ class SheepdogClient(object):
                     LOG.error(_LE('Failed to resize vdi. '
                                   'vdi:%(vdiname)s new size:%(size)s'),
                               {'vdiname': vdiname, 'size': size})
+
+    def get_disk_capacity(self):
+        try:
+            (stdout, stderr) = self._run_dog('node', 'info', '-r')
+            stats_pattern = re.compile(r'[\w\s%]*Total\s(\d+)\s(\d+)*')
+            m = stats_pattern.match(stdout)
+            total = float(m.group(1))
+            used = float(m.group(2))
+            total_gb = total / units.Gi
+            used_gb = used / units.Gi
+            free_gb = (total - used) / units.Gi
+        except exception.SheepdogCmdError as e:
+            stderr = e.kwargs['stderr']
+            with excutils.save_and_reraise_exception():
+                if stderr.startswith(self.DOG_RESP_CONNECTION_ERROR):
+                    LOG.error(_LE('Failed to connect sheep daemon. '
+                                  'addr: %(addr)s, port: %(port)s'),
+                              {'addr': self.addr, 'port': self.port})
+                elif stderr.startswith(self.DOG_RESP_GET_NO_NODE_INFO):
+                    LOG.error(_LE('Failed to get any nodes info of the '
+                                  'cluster. Please check "dog cluster info"'))
+                else:
+                    LOG.error(_LE('Failed to get disk usage from the Storage. '
+                                  'addr: %(addr)s, port: %(port)s'),
+                              {'addr': self.addr, 'port': self.port})
+        return (total_gb, used_gb, free_gb)
 
 
 class SheepdogIOWrapper(io.RawIOBase):
@@ -480,14 +507,12 @@ class SheepdogDriver(driver.VolumeDriver):
         stats['reserved_percentage'] = 0
         stats['QoS_support'] = False
 
+        # get disk usage of Sheepdog pool in Gi
         try:
-            stdout, _err = self._execute('dog', 'node', 'info', '-r')
-            m = self.stats_pattern.match(stdout)
-            total = float(m.group(1))
-            used = float(m.group(2))
-            stats['total_capacity_gb'] = total / units.Gi
-            stats['free_capacity_gb'] = (total - used) / units.Gi
-        except processutils.ProcessExecutionError:
+            (total_gb, used_gb, free_gb) = self.client.get_disk_capacity()
+            stats['total_capacity_gb'] = total_gb
+            stats['free_capacity_gb'] = free_gb
+        except exception.SheepdogCmdError:
             LOG.exception(_LE('error refreshing volume stats'))
 
         self._stats = stats
