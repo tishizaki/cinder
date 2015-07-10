@@ -87,6 +87,8 @@ class SheepdogClient(object):
     QEMU_IMG_RESP_INVALID_DRIVER = 'Unknown driver'
     QEMU_IMG_RESP_INVALID_FORMAT = 'Unknown file format'
 
+    STATS_PATTERN = re.compile(r'[\w\s%]*Total\s(\d+)\s(\d+)\s(\d+)*')
+
     def __init__(self, addr, port):
         self.addr = addr
         self.port = port
@@ -429,27 +431,35 @@ class SheepdogClient(object):
     def get_disk_capacity(self):
         try:
             (stdout, stderr) = self._run_dog('node', 'info', '-r')
-            stats_pattern = re.compile(r'[\w\s%]*Total\s(\d+)\s(\d+)*')
-            m = stats_pattern.match(stdout)
-            total = float(m.group(1))
-            used = float(m.group(2))
-            total_gb = total / units.Gi
-            used_gb = used / units.Gi
-            free_gb = (total - used) / units.Gi
         except exception.SheepdogCmdError as e:
             stderr = e.kwargs['stderr']
             with excutils.save_and_reraise_exception():
                 if stderr.startswith(self.DOG_RESP_CONNECTION_ERROR):
-                    LOG.error(_LE('Failed to connect sheep daemon. '
+                    LOG.exception(_LE('Failed to connect sheep daemon. '
                                   'addr: %(addr)s, port: %(port)s'),
-                              {'addr': self.addr, 'port': self.port})
+                                  {'addr': self.addr, 'port': self.port})
                 elif stderr.startswith(self.DOG_RESP_GET_NO_NODE_INFO):
-                    LOG.error(_LE('Failed to get any nodes info of the '
+                    LOG.exception(_LE('Failed to get any nodes info of the '
                                   'cluster. Please check "dog cluster info"'))
                 else:
-                    LOG.error(_LE('Failed to get disk usage from the Storage. '
-                                  'addr: %(addr)s, port: %(port)s'),
-                              {'addr': self.addr, 'port': self.port})
+                    LOG.exception(_LE('Failed to get disk usage from the '
+                                  'Storage. addr: %(addr)s, port: %(port)s'),
+                                  {'addr': self.addr, 'port': self.port})
+
+        m = self.STATS_PATTERN.match(stdout)
+        try:
+            total = float(m.group(1))
+            used = float(m.group(2))
+            free = float(m.group(3))
+        except Exception:
+            with excutils.save_and_reraise_exception():
+                LOG.exception(_LE('Failed to parse stdout of '
+                                  '"dog node list -r". stdout: %s'), stdout)
+
+        total_gb = total / units.Gi
+        used_gb = used / units.Gi
+        free_gb = free / units.Gi
+
         return (total_gb, used_gb, free_gb)
 
 
@@ -706,7 +716,7 @@ class SheepdogDriver(driver.VolumeDriver):
             (total_gb, used_gb, free_gb) = self.client.get_disk_capacity()
             stats['total_capacity_gb'] = total_gb
             stats['free_capacity_gb'] = free_gb
-        except exception.SheepdogCmdError:
+        except Exception:
             LOG.exception(_LE('error refreshing volume stats'))
 
         self._stats = stats

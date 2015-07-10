@@ -170,11 +170,6 @@ class SheepdogDriverTestDataGenerator(object):
         'QoS_support': False,
     }
 
-    COLLIE_NODE_INFO = """
-0 107287605248 3623897354 3%
-Total 107287605248 3623897354 3% 54760833024
-"""
-
     COLLIE_CLUSTER_INFO_0_5 = """\
 Cluster status: running
 
@@ -255,9 +250,9 @@ New VDI size is too large. This volume's max size is 4398046511104
 Failed to open VDI %(vdiname)s (snapshot id: 0 snapshot tag: ): No VDI found
 """
 
-    DOG_NODE_INFO = """\
-0 107287605248 3623897354 3%
-Total 107287605248 3623897354 3% 54760833024
+    DOG_NODE_INFO = """
+0 107287605248 3623897354 103663707894 3%
+Total 107287605248 3623897354 103663707894 3% 54760833024
 """
 
     DOG_NODE_INFO_ERROR_GET_NO_NODE_INFO = """\
@@ -1394,20 +1389,26 @@ class SheepdogClientTestCase(test.TestCase):
         self.assertEqual('Image sheepdog://f/f is unacceptable:'
                          ' Not a sheepdog image', exc.msg)
 
-    def test_get_disk_capacity_success(self):
+    @mock.patch.object(sheepdog.SheepdogClient, '_run_dog')
+    @mock.patch.object(sheepdog, 'LOG')
+    def test_get_disk_capacity_success(self, fake_logger, fake_execute):
+        cmd = self.test_data.CMD_DOG_NODE_INFO
+
+        # Test1: get disk capacity successfully
         expected_cmd = ('node', 'info', '-r')
         total_gb = self.test_data.TEST_VOLUME_STATS['total_capacity_gb']
         free_gb = self.test_data.TEST_VOLUME_STATS['free_capacity_gb']
         used_gb = total_gb - free_gb
         expected = (total_gb, used_gb, free_gb)
-        with mock.patch.object(self.client, '_run_dog') as fake_execute:
-            fake_execute.return_value = (self.test_data.DOG_NODE_INFO, '')
-            actual = self.client.get_disk_capacity()
-            fake_execute.assert_called_once_with(*expected_cmd)
-            self.assertEqual(expected, actual)
+        fake_execute.return_value = (self.test_data.DOG_NODE_INFO, '')
+        actual = self.client.get_disk_capacity()
+        fake_execute.assert_called_once_with(*expected_cmd)
+        self.assertEqual(expected, actual)
 
-    def test_get_disk_capacity_failed_to_connect(self):
-        cmd = self.test_data.CMD_DOG_NODE_INFO
+        # Test2: failed to connect to sheep process
+        fake_logger.reset_mock()
+        fake_execute.reset_mock()
+        fake_execute.return_value = None
         exit_code = 2
         stdout = 'stdout_dummy'
         stderr = self.test_data.DOG_COMMAND_ERROR_FAIL_TO_CONNECT
@@ -1415,56 +1416,56 @@ class SheepdogClientTestCase(test.TestCase):
                                                          exit_code=exit_code,
                                                          stdout=stdout,
                                                          stderr=stderr)
-        with mock.patch.object(self.client, '_run_dog') as fake_execute:
-            with mock.patch.object(sheepdog, 'LOG') as fake_logger:
-                fake_execute.side_effect = exception.SheepdogCmdError(
-                    cmd=cmd, exit_code=exit_code,
-                    stdout=stdout.replace('\n', '\\n'),
-                    stderr=stderr.replace('\n', '\\n'))
-                ex = self.assertRaises(exception.SheepdogCmdError,
-                                       self.client.get_disk_capacity)
-                self.assertTrue(fake_logger.error.called)
-                self.assertEqual(expected_msg, ex.msg)
+        fake_execute.side_effect = exception.SheepdogCmdError(
+            cmd=cmd, exit_code=exit_code, stdout=stdout.replace('\n', '\\n'),
+            stderr=stderr.replace('\n', '\\n'))
+        ex = self.assertRaises(exception.SheepdogCmdError,
+                               self.client.get_disk_capacity)
+        self.assertTrue(fake_logger.exception.called)
+        self.assertEqual(expected_msg, ex.msg)
 
-    def test_get_disk_capacity_no_node_info(self):
-        cmd = self.test_data.CMD_DOG_NODE_INFO
-        exit_code = 2
-        stdout = 'stdout_dummy'
+        # Test3: cannot get any node info
+        fake_logger.reset_mock()
+        fake_execute.reset_mock()
         stderr = self.test_data.DOG_NODE_INFO_ERROR_GET_NO_NODE_INFO
         expected_msg = self.test_data.sheepdog_cmd_error(cmd=cmd,
                                                          exit_code=exit_code,
                                                          stdout=stdout,
                                                          stderr=stderr)
-        with mock.patch.object(self.client, '_run_dog') as fake_execute:
-            with mock.patch.object(sheepdog, 'LOG') as fake_logger:
-                fake_execute.side_effect = exception.SheepdogCmdError(
-                    cmd=cmd, exit_code=exit_code,
-                    stdout=stdout.replace('\n', '\\n'),
-                    stderr=stderr.replace('\n', '\\n'))
-                ex = self.assertRaises(exception.SheepdogCmdError,
-                                       self.client.get_disk_capacity)
-                self.assertTrue(fake_logger.error.called)
-                self.assertEqual(expected_msg, ex.msg)
+        fake_execute.side_effect = exception.SheepdogCmdError(
+            cmd=cmd, exit_code=exit_code,
+            stdout=stdout.replace('\n', '\\n'),
+            stderr=stderr.replace('\n', '\\n'))
+        ex = self.assertRaises(exception.SheepdogCmdError,
+                               self.client.get_disk_capacity)
+        self.assertTrue(fake_logger.exception.called)
+        self.assertEqual(expected_msg, ex.msg)
 
-    def test_get_disk_capacity_unknown_error(self):
-        cmd = self.test_data.CMD_DOG_NODE_INFO
-        exit_code = 2
-        stdout = 'stdout_dummy'
+        # Test4: unknown error for doing _run_dog
+        fake_logger.reset_mock()
+        fake_execute.reset_mock()
         stderr = 'unknown'
         expected_msg = self.test_data.sheepdog_cmd_error(cmd=cmd,
                                                          exit_code=exit_code,
                                                          stdout=stdout,
                                                          stderr=stderr)
-        with mock.patch.object(self.client, '_run_dog') as fake_execute:
-            with mock.patch.object(sheepdog, 'LOG') as fake_logger:
-                fake_execute.side_effect = exception.SheepdogCmdError(
-                    cmd=cmd, exit_code=exit_code,
-                    stdout=stdout.replace('\n', '\\n'),
-                    stderr=stderr.replace('\n', '\\n'))
-                ex = self.assertRaises(exception.SheepdogCmdError,
-                                       self.client.get_disk_capacity)
-                self.assertTrue(fake_logger.error.called)
-                self.assertEqual(expected_msg, ex.msg)
+        fake_execute.side_effect = exception.SheepdogCmdError(
+            cmd=cmd, exit_code=exit_code,
+            stdout=stdout.replace('\n', '\\n'),
+            stderr=stderr.replace('\n', '\\n'))
+        ex = self.assertRaises(exception.SheepdogCmdError,
+                               self.client.get_disk_capacity)
+        self.assertTrue(fake_logger.exception.called)
+        self.assertEqual(expected_msg, ex.msg)
+
+        # Test5: cannot parse stdout of _run_dog
+        fake_logger.reset_mock()
+        fake_execute.reset_mock()
+        stdout = 'stdout_dummy'
+        stderr = ''
+        fake_execute.return_value = (stdout, stderr)
+        self.assertRaises(Exception, self.client.get_disk_capacity)
+        self.assertTrue(fake_logger.exception.called)
 
 
 # test for SheeepdogDriver Class
@@ -1503,31 +1504,33 @@ class SheepdogDriverTestCase(test.TestCase):
         self.driver.delete_volume(self.test_data.TEST_VOLUME)
         fake_execute.assert_called_once_with(self._vdiname)
 
-    def test_update_volume_stats(self):
+    @mock.patch.object(sheepdog.SheepdogClient, 'get_disk_capacity')
+    @mock.patch.object(sheepdog, 'LOG')
+    def test_update_volume_stats(self, fake_logger, fake_execute):
+        # Test1: update volume stats successfully
         total_gb = self.test_data.TEST_VOLUME_STATS['total_capacity_gb']
         free_gb = self.test_data.TEST_VOLUME_STATS['free_capacity_gb']
         used_gb = total_gb - free_gb
         expected = self.test_data.TEST_VOLUME_STATS
-        with mock.patch.object(self.client, 'get_disk_capacity') as fake_stats:
-            fake_stats.return_value = (total_gb, used_gb, free_gb)
-            actual = self.driver.get_volume_stats(True)
-            self.assertDictMatch(expected, actual)
+        fake_execute.return_value = (total_gb, used_gb, free_gb)
+        actual = self.driver.get_volume_stats(True)
+        self.assertDictMatch(expected, actual)
 
-    def test_update_volume_stats_error(self):
+        # Test2: fail to update volume stats
+        fake_logger.reset_mock()
+        fake_execute.reset_mock()
+        fake_execute.return_value = None
         cmd = self.test_data.CMD_DOG_NODE_INFO
         exit_code = 2
         stdout = 'stdout_dummy'
         stderr = 'stderr_dummy'
         expected = self.test_data.TEST_VOLUME_STATS_ERROR
-        with mock.patch.object(self.client, 'get_disk_capacity') as fake_stats:
-            with mock.patch.object(sheepdog, 'LOG') as fake_logger:
-                fake_stats.side_effect = exception.SheepdogCmdError(
-                    cmd=cmd, exit_code=exit_code,
-                    stdout=stdout.replace('\n', '\\n'),
-                    stderr=stderr.replace('\n', '\\n'))
-                actual = self.driver.get_volume_stats(True)
-                self.assertTrue(fake_logger.exception.called)
-                self.assertDictMatch(expected, actual)
+        fake_execute.side_effect = exception.SheepdogCmdError(
+            cmd=cmd, exit_code=exit_code, stdout=stdout.replace('\n', '\\n'),
+            stderr=stderr.replace('\n', '\\n'))
+        actual = self.driver.get_volume_stats(True)
+        self.assertTrue(fake_logger.exception.called)
+        self.assertDictMatch(expected, actual)
 
     @mock.patch.object(image_utils, 'temporary_file')
     @mock.patch.object(image_utils, 'fetch_verify_image')
