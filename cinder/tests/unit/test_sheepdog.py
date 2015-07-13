@@ -1519,13 +1519,11 @@ class SheepdogDriverTestCase(test.TestCase):
 
         # check execute correctly.
         self.driver.copy_image_to_volume(fake_context, fake_volume,
-                                         fake_image_service,
-                                         image_meta['id'])
+                                         fake_image_service, image_meta['id'])
         fake_delete.assert_called_once_with(fake_volume.name)
         fake_convert.assert_called_once_with(
             mock.ANY, 'sheepdog:%s' % fake_volume.name)
-        fake_resize.assert_called_once_with(fake_volume.name,
-                                            fake_volume.size)
+        fake_resize.assert_called_once_with(fake_volume.name, fake_volume.size)
 
         # check resize failed.
         fake_delete.reset_mock()
@@ -1535,9 +1533,8 @@ class SheepdogDriverTestCase(test.TestCase):
         fake_resize.side_effect = exception.SheepdogCmdError(
             cmd='dummy', exit_code=1, stdout='dummy', stderr='dummy')
         self.assertRaises(exception.SheepdogCmdError,
-                          self.driver.copy_image_to_volume,
-                          fake_context, fake_volume,
-                          fake_image_service, image_meta['id'])
+                          self.driver.copy_image_to_volume, fake_context,
+                          fake_volume, fake_image_service, image_meta['id'])
         fake_delete.assert_called_with(fake_volume.name)
         self.assertEqual(2, fake_delete.call_count)
 
@@ -1566,9 +1563,8 @@ class SheepdogDriverTestCase(test.TestCase):
         fake_image_service.update.side_effect = exception.SheepdogCmdError(
             cmd='dummy', exit_code=1, stdout='dummy', stderr='dummy')
         self.assertRaises(exception.SheepdogCmdError,
-                          self.driver.copy_volume_to_image,
-                          context, src_volume,
-                          fake_image_service, image_meta)
+                          self.driver.copy_volume_to_image, context,
+                          src_volume, fake_image_service, image_meta)
         self.assertTrue(fake_logger.error.called)
 
     @mock.patch.object(sheepdog.SheepdogClient, 'create_snapshot')
@@ -1629,10 +1625,11 @@ class SheepdogDriverTestCase(test.TestCase):
         fake_volume = self.test_data.TEST_VOLUME
         stdout = self.test_data.IS_CLONEABLE_SNAPSHOT
         stderr = ''
-        fake_location = 'sheepdog://%s' % fake_volume.id
-        image_location = (fake_location, None)
         image_meta = self.test_data.TEST_IMAGE_META
+        fake_image_location = 'sheepdog://%s' % image_meta['id']
+        image_location = (fake_image_location, None)
         image_service = ''
+        expected_provider_location = 'sheepdog:%s' % fake_volume.name
 
         fake_execute.return_value = (stdout, stderr)
         model_updated, cloned = self.driver.clone_image(
@@ -1640,7 +1637,7 @@ class SheepdogDriverTestCase(test.TestCase):
 
         self.assertEqual(1, fake_clone.call_count)
         self.assertTrue(cloned)
-        self.assertEqual("sheepdog://%s" % fake_volume.name,
+        self.assertEqual(expected_provider_location,
                          model_updated['provider_location'])
 
     @mock.patch.object(sheepdog.SheepdogClient, '_run_dog')
@@ -1651,17 +1648,19 @@ class SheepdogDriverTestCase(test.TestCase):
         fake_volume = self.test_data.TEST_VOLUME
         stdout = self.test_data.IS_CLONEABLE_VOLUME
         stderr = ''
-        fake_location = 'sheepdog://%s' % fake_volume.id
-        image_location = (fake_location, None)
         image_meta = self.test_data.TEST_IMAGE_META
+        fake_image_location = 'sheepdog://%s' % image_meta['id']
+        image_location = (fake_image_location, None)
         image_service = ''
+        expected_provider_location = 'sheepdog:%s' % fake_volume.name
+
         fake_execute.return_value = (stdout, stderr)
         model_updated, cloned = self.driver.clone_image(
             context, fake_volume, image_location, image_meta, image_service)
 
         self.assertEqual(1, fake_create_cloned_volume.call_count)
         self.assertTrue(cloned)
-        self.assertEqual("sheepdog://%s" % fake_volume.name,
+        self.assertEqual(expected_provider_location,
                          model_updated['provider_location'])
 
     @mock.patch.object(sheepdog.SheepdogClient, '_is_cloneable')
@@ -1684,9 +1683,9 @@ class SheepdogDriverTestCase(test.TestCase):
                                                    fake_execute):
         context = {}
         fake_volume = self.test_data.TEST_VOLUME
-        fake_location = 'sheepdog://%s' % fake_volume.id
-        image_location = (fake_location, None)
         image_meta = self.test_data.TEST_IMAGE_META
+        fake_image_location = 'sheepdog://%s' % image_meta['id']
+        image_location = (fake_image_location, None)
         image_service = ''
         stdout = self.test_data.IS_CLONEABLE_SNAPSHOT
         stderr = ''
@@ -1708,9 +1707,9 @@ class SheepdogDriverTestCase(test.TestCase):
                                                  fake_execute):
         context = {}
         fake_volume = self.test_data.TEST_VOLUME
-        fake_location = 'sheepdog://%s' % fake_volume.id
-        image_location = (fake_location, None)
         image_meta = self.test_data.TEST_IMAGE_META
+        fake_image_location = 'sheepdog://%s' % image_meta['id']
+        image_location = (fake_image_location, None)
         image_service = ''
         stdout = self.test_data.IS_CLONEABLE_VOLUME
         stderr = ''
@@ -1736,7 +1735,7 @@ class SheepdogDriverTestCase(test.TestCase):
 
     def test_local_path(self):
         fake_volume = self.test_data.TEST_VOLUME
-        expected_path = 'sheepdog://%s' % fake_volume.name
+        expected_path = 'sheepdog:%s' % fake_volume.name
 
         ret = self.driver.local_path(fake_volume)
         self.assertEqual(ret, expected_path)
@@ -1805,8 +1804,8 @@ class SheepdogDriverTestCase(test.TestCase):
         # check that the snapshot gets deleted in case of a backup error.
         class BackupError(Exception):
             pass
-        fake_backup_service.backup.side_effect = BackupError()
 
+        fake_backup_service.backup.side_effect = BackupError()
         self.assertRaises(BackupError,
                           self.driver.backup_volume,
                           fake_context,

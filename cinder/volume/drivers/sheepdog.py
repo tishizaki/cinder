@@ -587,7 +587,7 @@ class SheepdogDriver(driver.VolumeDriver):
         try:
             if _snapshot:
                 self.client.clone(source_name, GLANCE_SNAPNAME,
-                                  volume['name'], volume.size)
+                                  volume.name, volume.size)
             else:
                 self.create_cloned_volume(volume,
                                           source_vol)
@@ -679,7 +679,7 @@ class SheepdogDriver(driver.VolumeDriver):
 
     def local_path(self, volume):
         """Get volume path."""
-        return "sheepdog://%s" % volume['name']
+        return "sheepdog:%s" % volume.name
 
     def ensure_export(self, context, volume):
         """Safely and synchronously recreate an export for a logical volume."""
@@ -765,4 +765,4 @@ class SheepdogDriver(driver.VolumeDriver):
     def restore_backup(self, context, backup, volume, backup_service):
         """Restore an existing backup to a new or existing volume."""
         sheepdog_fd = SheepdogIOWrapper(volume)
-        backup_service.restore(backup, volume['id'], sheepdog_fd)
+        backup_service.restore(backup, volume.id, sheepdog_fd)
