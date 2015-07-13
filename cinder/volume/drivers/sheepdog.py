@@ -38,8 +38,8 @@ from cinder.openstack.common import fileutils
 from cinder import utils
 from cinder.volume import driver
 
-# set default snapshot name
-DEFAULT_SNAPNAME = 'glance-image'
+# snapshot name of glance image
+GLANCE_SNAPNAME = 'glance-image'
 
 LOG = logging.getLogger(__name__)
 
@@ -147,7 +147,7 @@ class SheepdogClient(object):
             stderr = e.kwargs['stderr']
             with excutils.save_and_reraise_exception():
                 if stderr.startswith(self.DOG_RESP_CONNECTION_ERROR):
-                    msg = _LE('Failed to connect sheep daemon. '
+                    msg = _LE('Failed to connect to sheep daemon. '
                               'addr: %(addr)s, port: %(port)s')
                     LOG.error(msg, {'addr': self.addr, 'port': self.port})
 
@@ -171,7 +171,7 @@ class SheepdogClient(object):
             stderr = e.kwargs['stderr']
             with excutils.save_and_reraise_exception():
                 if stderr.startswith(self.DOG_RESP_CONNECTION_ERROR):
-                    LOG.error(_LE("Failed to connect sheep daemon. "
+                    LOG.error(_LE("Failed to connect to sheep daemon. "
                               "addr: %(addr)s, port: %(port)s"),
                               {'addr': self.addr, 'port': self.port})
                 elif stderr.rstrip().endswith(
@@ -193,7 +193,7 @@ class SheepdogClient(object):
                 # To avoid a Sheepdog's bug, now we need to check stderr.
                 # If Sheepdog has been fixed, this check logic is needed
                 # by old Sheepdog users.
-                reason = (_('Failed to connect sheep daemon. '
+                reason = (_('Failed to connect to sheep daemon. '
                           'addr: %(addr)s, port: %(port)s'),
                           {'addr': self.addr, 'port': self.port})
                 raise exception.SheepdogError(reason=reason)
@@ -201,7 +201,7 @@ class SheepdogClient(object):
             stderr = e.kwargs['stderr']
             with excutils.save_and_reraise_exception():
                 if stderr.startswith(self.DOG_RESP_CONNECTION_ERROR):
-                    LOG.error(_LE('Failed to connect sheep daemon. '
+                    LOG.error(_LE('Failed to connect to sheep daemon. '
                               'addr: %(addr)s, port: %(port)s'),
                               {'addr': self.addr, 'port': self.port})
                 else:
@@ -215,7 +215,7 @@ class SheepdogClient(object):
             stderr = e.kwargs['stderr']
             with excutils.save_and_reraise_exception():
                 if stderr.startswith(self.DOG_RESP_CONNECTION_ERROR):
-                    LOG.error(_LE('Failed to connect sheep daemon. '
+                    LOG.error(_LE('Failed to connect to sheep daemon. '
                               'addr: %(addr)s, port: %(port)s'),
                               {'addr': self.addr, 'port': str(self.port)})
                 elif stderr.rstrip('\\n').endswith(
@@ -246,7 +246,7 @@ class SheepdogClient(object):
                 # To avoid a Sheepdog's bug, now we need to check stderr.
                 # If Sheepdog has been fixed, this check logic is needed
                 # by old Sheepdog users.
-                reason = (_('Failed to connect sheep daemon. '
+                reason = (_('Failed to connect to sheep daemon. '
                           'addr: %(addr)s, port: %(port)s'),
                           {'addr': self.addr, 'port': self.port})
                 raise exception.SheepdogError(reason=reason)
@@ -255,7 +255,7 @@ class SheepdogClient(object):
             stderr = e.kwargs['stderr']
             with excutils.save_and_reraise_exception():
                 if stderr.startswith(self.DOG_RESP_CONNECTION_ERROR):
-                    msg = _LE('Failed to connect sheep daemon. '
+                    msg = _LE('Failed to connect to sheep daemon. '
                               'addr: %(addr)s, port: %(port)s')
                     LOG.error(msg, {'addr': self.addr, 'port': str(self.port)})
                 else:
@@ -303,7 +303,7 @@ class SheepdogClient(object):
             stderr = e.kwargs['stderr']
             with excutils.save_and_reraise_exception():
                 if stderr.startswith(self.DOG_RESP_CONNECTION_ERROR):
-                    LOG.error(_LE('Failed to connect sheep daemon. '
+                    LOG.error(_LE('Failed to connect to sheep daemon. '
                                   'addr: %(addr)s, port: %(port)s'),
                               {'addr': self.addr, 'port': self.port})
                 elif stderr.rstrip('\\n').endswith(
@@ -403,7 +403,7 @@ class SheepdogClient(object):
             LOG.debug('Image %s is not stored in sheepdog', volume_name)
             return _cloneable, _snapshot
 
-        if DEFAULT_SNAPNAME not in stdout:
+        if GLANCE_SNAPNAME not in stdout:
             LOG.debug('Image %s is not a snapshot volume', volume_name)
             _cloneable = True
             return _cloneable, _snapshot
@@ -549,7 +549,7 @@ class SheepdogDriver(driver.VolumeDriver):
 
         try:
             if _snapshot:
-                self.client.clone(source_name, DEFAULT_SNAPNAME,
+                self.client.clone(source_name, GLANCE_SNAPNAME,
                                   volume['name'], volume.size)
             else:
                 self.create_cloned_volume(volume,
@@ -619,7 +619,7 @@ class SheepdogDriver(driver.VolumeDriver):
                     self.client.delete(volume.name)
 
     def copy_volume_to_image(self, context, volume, image_service, image_meta):
-        """Copy the volume to specified image."""
+        """Copy the volume to the specified image."""
         image_id = image_meta['id']
         try:
             with image_utils.temporary_file() as tmp:
